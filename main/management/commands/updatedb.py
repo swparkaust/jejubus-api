@@ -101,15 +101,16 @@ def get_node_ids(city_code, node_name):
 def get_route_node(city_code, route_id, node_name, start=None, end=None, interactive=True):
     sl = slice(start, end)
     all_route_nodes = get_all_route_nodes(city_code, route_id)[sl]
-    for node_id in get_node_ids(city_code, node_name):
-        for route_node in all_route_nodes:
+    node_ids = get_node_ids(city_code, node_name)
+    for route_node in all_route_nodes:
+        for node_id in node_ids:
             if route_node['nodeid'] == node_id:
                 return route_node
     station_other_names = StationOtherName.objects.filter(
         other_station_name=node_name)
     if station_other_names.exists():
-        for o in station_other_names:
-            for route_node in all_route_nodes:
+        for route_node in all_route_nodes:
+            for o in station_other_names:
                 if route_node['nodeid'] == o.station_id:
                     return route_node
     if interactive:
