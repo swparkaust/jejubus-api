@@ -98,7 +98,7 @@ def get_node_ids(city_code, node_name):
     return [x.text for x in found_values]
 
 
-def get_route_node(city_code, route_id, node_name, start=None, end=None, quiet=False):
+def get_route_node(city_code, route_id, node_name, start=None, end=None, interactive=True):
     sl = slice(start, end)
     all_route_nodes = get_all_route_nodes(city_code, route_id)[sl]
     for node_id in get_node_ids(city_code, node_name):
@@ -112,7 +112,7 @@ def get_route_node(city_code, route_id, node_name, start=None, end=None, quiet=F
             for route_node in all_route_nodes:
                 if route_node['nodeid'] == o.station_id:
                     return route_node
-    if not quiet:
+    if interactive:
         choices = [x['nodenm'] for x in all_route_nodes]
         matches = difflib.get_close_matches(
             node_name, choices, len(choices), 0)
@@ -142,10 +142,10 @@ def get_route_nodes(city_code, route_id, node_names):
     for i, node_name in enumerate(node_names):
         if last is None:
             route_node = get_route_node(
-                city_code, route_id, node_name, 0, 1, True)
+                city_code, route_id, node_name, 0, 1, False)
         else:
             route_node = get_route_node(
-                city_code, route_id, node_name, last, -(len(node_names) - i - 1) or None, True)
+                city_code, route_id, node_name, last, -(len(node_names) - i - 1) or None, False)
         if route_node is None:
             continue
         route_nodes.append(route_node)
@@ -203,6 +203,13 @@ class Command(BaseCommand):
             action='store_true',
             dest='clear_db',
             help='Clear database before adding new objects',
+        )
+        parser.add_argument(
+            '--noinput',
+            action='store_false',
+            dest='interactive',
+            default=True,
+            help='Do NOT prompt the user for input of any kind.',
         )
 
     def handle(self, *args, **options):
@@ -273,10 +280,10 @@ class Command(BaseCommand):
                                         node_name)
                                     if last is None:
                                         route_node = get_route_node(
-                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, 0, 1)
+                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, 0, 1, options['interactive'])
                                     else:
                                         route_node = get_route_node(
-                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, last, -(len(node_names) - i - 1) or None)
+                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
                                     if route_node is None:
                                         continue
                                     node_name = route_node['nodenm']
