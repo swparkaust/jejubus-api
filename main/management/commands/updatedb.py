@@ -115,24 +115,27 @@ def get_route_node(city_code, route_id, node_name, start=None, end=None, interac
                     return route_node
     if interactive:
         choices = [x['nodenm'] for x in all_route_nodes]
-        matches = difflib.get_close_matches(
-            node_name, choices, len(choices), 0)
-        questions = [
-            inquirer.List(
-                'node_name',
-                message="What node is " + node_name + "?",
-                choices=matches, ),
-        ]
-        answers = inquirer.prompt(questions)
-        if answers is None:
-            return None
+        if choices:
+            matches = difflib.get_close_matches(
+                node_name, choices, len(choices), 0)
+            questions = [
+                inquirer.List(
+                    'node_name',
+                    message="What node is " + node_name + "?",
+                    choices=matches, ),
+            ]
+            answers = inquirer.prompt(questions)
+            if answers is None:
+                return None
+            else:
+                selected_node = all_route_nodes[choices.index(
+                    answers["node_name"])]
+                station_other_name = StationOtherName(
+                    station_id=selected_node['nodeid'], other_station_name=node_name)
+                station_other_name.save()
+                return selected_node
         else:
-            selected_node = all_route_nodes[choices.index(
-                answers["node_name"])]
-            station_other_name = StationOtherName(
-                station_id=selected_node['nodeid'], other_station_name=node_name)
-            station_other_name.save()
-            return selected_node
+            return None
     else:
         return None
 
