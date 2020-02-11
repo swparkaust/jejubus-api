@@ -198,6 +198,12 @@ class Command(BaseCommand):
             dest='clear_history',
             help='Clean station find history',
         )
+        parser.add_argument(
+            '--clear-db',
+            action='store_true',
+            dest='clear_db',
+            help='Clear database before adding new objects',
+        )
 
     def handle(self, *args, **options):
         requests_cache.install_cache('jejubus_cache')
@@ -213,9 +219,12 @@ class Command(BaseCommand):
             StationOtherName.objects.all().delete()
             self.stdout.write('done.')
 
-        Time.objects.all().delete()
-        Route.objects.all().delete()
-        Station.objects.all().delete()
+        if options['clear_db']:
+            self.stdout.write('Clearing database ... ', ending='')
+            Time.objects.all().delete()
+            Route.objects.all().delete()
+            Station.objects.all().delete()
+            self.stdout.write('done.')
 
         with os.scandir("temp") as it:
             for entry in tqdm(it):
