@@ -163,25 +163,28 @@ def get_route(city_code, route_number, node_names):
     soup = BeautifulSoup(response_body, 'html.parser')
 
     found_values = soup.find_all('item')
-    best_match = max(found_values, key=lambda result: difflib.SequenceMatcher(None, [
-                     x['nodenm'] for x in get_route_nodes(city_code, result.find('routeid').text, node_names)], node_names).ratio())
-    all_route_nodes = get_all_route_nodes(
-        city_code, best_match.find('routeid').text)
-    if best_match.find('startnodenm').text != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
-        route_start_node = all_route_nodes[0]
-        start_station_other_name = StationOtherName(
-            station_id=route_start_node['nodeid'], other_station_name=node_names[0])
-        start_station_other_name.save()
-    if best_match.find('endnodenm').text != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
-        route_end_node = all_route_nodes[-1]
-        end_station_other_name = StationOtherName(
-            station_id=route_end_node['nodeid'], other_station_name=node_names[-1])
-        end_station_other_name.save()
-    tags = ['routeid', 'routeno', 'routetp', 'endnodenm', 'startnodenm']
-    route = {}
-    for tag in tags:
-        route[tag] = '{}'.format(best_match.find(tag).text)
-    return route
+    if found_values:
+        best_match = max(found_values, key=lambda result: difflib.SequenceMatcher(None, [
+                         x['nodenm'] for x in get_route_nodes(city_code, result.find('routeid').text, node_names)], node_names).ratio())
+        all_route_nodes = get_all_route_nodes(
+            city_code, best_match.find('routeid').text)
+        if best_match.find('startnodenm').text != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
+            route_start_node = all_route_nodes[0]
+            start_station_other_name = StationOtherName(
+                station_id=route_start_node['nodeid'], other_station_name=node_names[0])
+            start_station_other_name.save()
+        if best_match.find('endnodenm').text != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
+            route_end_node = all_route_nodes[-1]
+            end_station_other_name = StationOtherName(
+                station_id=route_end_node['nodeid'], other_station_name=node_names[-1])
+            end_station_other_name.save()
+        tags = ['routeid', 'routeno', 'routetp', 'endnodenm', 'startnodenm']
+        route = {}
+        for tag in tags:
+            route[tag] = '{}'.format(best_match.find(tag).text)
+        return route
+    else:
+        return None
 
 
 class Command(BaseCommand):
