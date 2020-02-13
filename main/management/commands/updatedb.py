@@ -5,7 +5,7 @@ import os
 import re
 import requests
 import requests_cache
-from bs4 import BeautifulSoup
+import xmltodict
 from openpyxl import load_workbook
 from tqdm import tqdm
 
@@ -63,127 +63,112 @@ def extract_time_from_string(s):
         return datetime.time(int(matches[0][0]), int(matches[0][1]), 0)
 
 
-def get_all_route_nodes(city_code, route_id):
-    url = 'http://openapi.tago.go.kr/openapi/service/BusRouteInfoInqireService/getRouteAcctoThrghSttnList'
-    queryParams = '?ServiceKey=' + settings.BUS_INFO_API_KEY + \
-        '&numOfRows=100&pageNo=1&cityCode=' + city_code + '&routeId=' + route_id
+def get_all_route_nodes(route_id):
+    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/StationRoutePr'
+    payload = {'route': route_id}
 
-    request = requests.get(url + queryParams)
-    response_body = request.text
-    soup = BeautifulSoup(response_body, 'html.parser')
+    r = requests.get(url, params=payload)
+    data = xmltodict.parse(r.content)
 
-    found_values = soup.find_all('item')
-    route_nodes = []
-    for x in found_values:
-        tags = [
-            'routeid', 'nodeid', 'nodenm', 'nodeord', 'gpslati', 'gpslong', 'updowncd'
-        ]
-        route_node = {}
-        for tag in tags:
-            route_node[tag] = '{}'.format(x.find(tag).text)
-        route_nodes.append(route_node)
-    return route_nodes
+    return data['response']['body']['items']['item']
+    
+    
+def get_all_routes():
+    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Bus'
 
+    r = requests.get(url)
+    data = xmltodict.parse(r.content)
 
-def get_node_ids(city_code, node_name):
-    url = 'http://openapi.tago.go.kr/openapi/service/BusSttnInfoInqireService/getSttnNoList'
-    queryParams = '?ServiceKey=' + settings.BUS_INFO_API_KEY + \
-        '&cityCode=' + city_code + '&nodeNm=' + node_name
+    return data['response']['body']['items']['item']
+    
+    
+def get_all_stations():
+    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Station'
 
-    request = requests.get(url + queryParams)
-    response_body = request.text
-    soup = BeautifulSoup(response_body, 'html.parser')
+    r = requests.get(url)
+    data = xmltodict.parse(r.content)
 
-    found_values = soup.find_all('nodeid')
-    return [x.text for x in found_values]
+    return data['response']['body']['items']['item']
 
 
-def get_route_node(city_code, route_id, node_name, start=None, end=None, interactive=True):
+def get_node_ids(node_name):
+    return [x.station_id for x in Station.objects.filter(station_name__contains=node_name)]
+
+
+def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
     sl = slice(start, end)
-    all_route_nodes = get_all_route_nodes(city_code, route_id)[sl]
-    node_ids = get_node_ids(city_code, node_name)
+    all_route_nodes = get_all_route_nodes(route_id)[sl]
+    node_ids = get_node_ids(node_name)
     for route_node in all_route_nodes:
         for node_id in node_ids:
-            if route_node['nodeid'] == node_id:
+            if route_node['stationId'] == node_id:
                 return route_node
     station_other_names = StationOtherName.objects.filter(
         other_station_name=node_name)
     if station_other_names.exists():
         for route_node in all_route_nodes:
             for o in station_other_names:
-                if route_node['nodeid'] == o.station_id:
+                if route_node['stationId'] == o.station_id:
                     return route_node
     if interactive:
-        choices = [x['nodenm'] for x in all_route_nodes]
-        matches = difflib.get_close_matches(
-            node_name, choices, len(choices), 0)
-        questions = [
-            inquirer.List(
-                'node_name',
-                message="What node is " + node_name + "?",
-                choices=matches, ),
-        ]
-        answers = inquirer.prompt(questions)
-        if answers is None:
-            return None
+        choices = [Station.objects.get(station_id=x['stationId']).station_name for x in all_route_nodes]
+        if choices:
+            matches = difflib.get_close_matches(
+                node_name, choices, len(choices), 0)
+            questions = [
+                inquirer.List(
+                    'node_name',
+                    message="What node is " + node_name + "?",
+                    choices=matches, ),
+            ]
+            answers = inquirer.prompt(questions)
+            if answers is None:
+                return None
+            else:
+                selected_node = all_route_nodes[choices.index(
+                    answers["node_name"])]
+                station_other_name = StationOtherName(
+                    station_id=selected_node['stationId'], other_station_name=node_name)
+                station_other_name.save()
+                return selected_node
         else:
-            selected_node = all_route_nodes[choices.index(
-                answers["node_name"])]
-            station_other_name = StationOtherName(
-                station_id=selected_node['nodeid'], other_station_name=node_name)
-            station_other_name.save()
-            return selected_node
+            return None
     else:
         return None
 
 
-def get_route_nodes(city_code, route_id, node_names):
+def get_route_nodes(route_id, node_names):
     route_nodes = []
     last = None
     for i, node_name in enumerate(node_names):
         if last is None:
-            route_node = get_route_node(
-                city_code, route_id, node_name, 0, 1, False)
+            route_node = get_route_node(route_id, node_name, 0, 1, False)
         else:
-            route_node = get_route_node(
-                city_code, route_id, node_name, last, -(len(node_names) - i - 1) or None, False)
+            route_node = get_route_node(route_id, node_name, last, -(len(node_names) - i - 1) or None, False)
         if route_node is None:
             continue
         route_nodes.append(route_node)
-        last = int(route_node['nodeord'])
+        last = int(route_node['stationOrd'])
     return route_nodes
 
 
-def get_route(city_code, route_number, node_names):
-    url = 'http://openapi.tago.go.kr/openapi/service/BusRouteInfoInqireService/getRouteNoList'
-    queryParams = '?ServiceKey=' + settings.BUS_INFO_API_KEY + \
-        '&cityCode=' + city_code + '&routeNo=' + route_number
-
-    request = requests.get(url + queryParams)
-    response_body = request.text
-    soup = BeautifulSoup(response_body, 'html.parser')
-
-    found_values = soup.find_all('item')
-    if found_values:
-        best_match = max(found_values, key=lambda result: difflib.SequenceMatcher(None, [
-                         x['nodenm'] for x in get_route_nodes(city_code, result.find('routeid').text, node_names)], node_names).ratio())
-        all_route_nodes = get_all_route_nodes(
-            city_code, best_match.find('routeid').text)
-        if best_match.find('startnodenm').text != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
-            route_start_node = all_route_nodes[0]
+def get_route(route_number, node_names):
+    routes = Route.objects.filter(route_number__contains=route_number)
+    if routes:
+        best_match = max(routes, key=lambda result: difflib.SequenceMatcher(None, [
+                         Station.objects.get(station_id=x['stationId']).station_name for x in get_route_nodes(result.route_id, node_names)], node_names).ratio())
+        all_route_nodes = get_all_route_nodes(best_match.route_id)
+        start_station = Station.objects.get(station_id=all_route_nodes[0]['stationId'])
+        end_station = Station.objects.get(station_id=all_route_nodes[-1]['stationId'])
+        if start_station.station_name != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
             start_station_other_name = StationOtherName(
-                station_id=route_start_node['nodeid'], other_station_name=node_names[0])
+                station_id=start_station.station_id, other_station_name=node_names[0])
             start_station_other_name.save()
-        if best_match.find('endnodenm').text != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
-            route_end_node = all_route_nodes[-1]
+        if end_station.station_name != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
             end_station_other_name = StationOtherName(
-                station_id=route_end_node['nodeid'], other_station_name=node_names[-1])
+                station_id=end_station.station_id, other_station_name=node_names[-1])
             end_station_other_name.save()
-        tags = ['routeid', 'routeno', 'routetp', 'endnodenm', 'startnodenm']
-        route = {}
-        for tag in tags:
-            route[tag] = '{}'.format(best_match.find(tag).text)
-        return route
+        return best_match
     else:
         return None
 
@@ -215,13 +200,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         requests_cache.install_cache('jejubus_cache')
-
-        for route_type in settings.ROUTE_TYPES:
-            download(
-                "http://bus.jeju.go.kr/publicTrafficInformation/downloadSchedule/" +
-                route_type,
-                dest_folder="temp")
-
+        
         if options['clear_history']:
             self.stdout.write('Clearing station find history ... ', ending='')
             StationOtherName.objects.all().delete()
@@ -233,7 +212,25 @@ class Command(BaseCommand):
             Route.objects.all().delete()
             Station.objects.all().delete()
             self.stdout.write('done.')
-
+            
+        for route_type in settings.ROUTE_TYPES:
+            download(
+                "http://bus.jeju.go.kr/publicTrafficInformation/downloadSchedule/" +
+                route_type,
+                dest_folder="temp")
+                
+        self.stdout.write('Saving routes ... ', ending='')
+        for route in get_all_routes():
+            route_obj = Route(route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
+            route_obj.save()
+        self.stdout.write('done.')
+            
+        self.stdout.write('Saving stations ... ', ending='')
+        for station in get_all_stations():
+            station_obj = Station(station_id=station['stationId'], station_name=station['stationNm'])
+            station_obj.save()
+        self.stdout.write('done.')
+        
         with os.scandir("temp") as it:
             for entry in tqdm(it):
                 if entry.name.endswith(".xlsx") and entry.is_file():
@@ -258,13 +255,9 @@ class Command(BaseCommand):
                                         node_name)
                                     node_names.append(node_name)
 
-                        route = get_route(
-                            settings.CITY_CODE_JEJU, route_number, node_names)
+                        route = get_route(route_number, node_names)
                         if route is None:
                             continue
-                        route_obj = Route(route_type=os.path.splitext(entry.name)[
-                                          0], route_id=route['routeid'], route_number=route_number, start_station_name=route['startnodenm'], end_station_name=route['endnodenm'])
-                        route_obj.save()
 
                         route_number_column = None
                         last = None
@@ -280,19 +273,15 @@ class Command(BaseCommand):
                                     node_name = extract_node_name_from_string(
                                         node_name)
                                     if last is None:
-                                        route_node = get_route_node(
-                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, 0, 1, options['interactive'])
+                                        route_node = get_route_node(route.route_id, node_name, 0, 1, options['interactive'])
                                     else:
-                                        route_node = get_route_node(
-                                            settings.CITY_CODE_JEJU, route['routeid'], node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
+                                        route_node = get_route_node(route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
                                     if route_node is None:
                                         continue
-                                    node_name = route_node['nodenm']
-                                    last = int(route_node['nodeord'])
+                                    last = int(route_node['stationOrd'])
                                     i += 1
-                                    station = Station(
-                                        station_id=route_node['nodeid'], station_name=node_name)
-                                    station.save()
+                                    station = Station.objects.get(station_id=route_node['stationId'])
+                                    node_name = station.station_name
                                     for cell2 in sheet[cell.column][cell.row + 1:]:
                                         time = cell2.value
                                         if time is not None:
@@ -310,15 +299,11 @@ class Command(BaseCommand):
                                                 route_number = extract_route_number_from_string(
                                                     str(route_number))
 
-                                                route = get_route(
-                                                    settings.CITY_CODE_JEJU, route_number, node_names)
+                                                route = get_route(route_number, node_names)
                                                 if route is None:
                                                     continue
-                                                route_obj = Route(route_type=os.path.splitext(entry.name)[
-                                                                  0], route_id=route['routeid'], route_number=route_number, start_station_name=route['startnodenm'], end_station_name=route['endnodenm'])
-                                                route_obj.save()
                                             time_obj = Time(
-                                                route=route_obj, station=station, time=time)
+                                                route=route, station=station, time=time)
                                             time_obj.save()
 
         self.stdout.write(self.style.SUCCESS(
