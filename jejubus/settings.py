@@ -121,10 +121,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
-CITY_CODE_JEJU = "39"
-
-BUS_INFO_API_KEY = 'PUT_YOUR_SERVICE_KEY_HERE'
-
 ROUTE_TYPES = [
 	"fast", "global", "jejuGlobal", "jejuLocal", "jejuPublic", "seogwiGlobal",
 	"seogwiLocal", "seogwiPublic", "tourist", "limousine", "night", "lowbus",
