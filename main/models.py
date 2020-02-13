@@ -21,11 +21,9 @@ class Route(models.Model):
 	route_type = models.CharField(max_length=20)
 	route_id = models.CharField(max_length=30, primary_key=True)
 	route_number = models.CharField(max_length=30)
-	start_station_name = models.CharField(max_length=30)
-	end_station_name = models.CharField(max_length=30)
 		
 	def __str__(self):
-		return self.route_id + '|' + self.route_number + '(' + self.end_station_name + ')'
+		return self.route_id + '|' + self.route_number
 		
 		
 class Time(models.Model):
