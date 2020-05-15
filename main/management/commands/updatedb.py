@@ -152,23 +152,45 @@ def get_route_nodes(route_id, node_names):
     return route_nodes
 
 
-def get_route(route_number, node_names):
+def get_route(route_number, node_names, interactive=True):
     routes = Route.objects.filter(route_number__contains=route_number)
     if routes:
-        best_match = max(routes, key=lambda result: difflib.SequenceMatcher(None, [
-                         Station.objects.get(station_id=x['stationId']).station_name for x in get_route_nodes(result.route_id, node_names)], node_names).ratio())
-        all_route_nodes = get_all_route_nodes(best_match.route_id)
-        start_station = Station.objects.get(station_id=all_route_nodes[0]['stationId'])
-        end_station = Station.objects.get(station_id=all_route_nodes[-1]['stationId'])
-        if start_station.station_name != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
-            start_station_other_name = StationOtherName(
-                station_id=start_station.station_id, other_station_name=node_names[0])
-            start_station_other_name.save()
-        if end_station.station_name != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
-            end_station_other_name = StationOtherName(
-                station_id=end_station.station_id, other_station_name=node_names[-1])
-            end_station_other_name.save()
-        return best_match
+        choices = [[Station.objects.get(station_id=x['stationId']).station_name for x in get_route_nodes(
+            route.route_id, node_names)] for route in routes]
+        if choices:
+            matches = sorted(choices, key=len, reverse=True)
+            if interactive:
+                questions = [
+                    inquirer.List(
+                        'route',
+                        message="What route is " + route_number +
+                        " " + "-".join(node_names) + "?",
+                        choices=matches, ),
+                ]
+                answers = inquirer.prompt(questions)
+                if answers is None:
+                    return None
+                else:
+                    selected_route = routes[choices.index(
+                        answers["route"])]
+            else:
+                selected_route = routes[choices.index(matches[0])]
+            all_route_nodes = get_all_route_nodes(selected_route.route_id)
+            start_station = Station.objects.get(
+                station_id=all_route_nodes[0]['stationId'])
+            end_station = Station.objects.get(
+                station_id=all_route_nodes[-1]['stationId'])
+            if start_station.station_name != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
+                start_station_other_name = StationOtherName(
+                    station_id=start_station.station_id, other_station_name=node_names[0])
+                start_station_other_name.save()
+            if end_station.station_name != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
+                end_station_other_name = StationOtherName(
+                    station_id=end_station.station_id, other_station_name=node_names[-1])
+                end_station_other_name.save()
+            return selected_route
+        else:
+            return None
     else:
         return None
 
@@ -255,7 +277,8 @@ class Command(BaseCommand):
                                         node_name)
                                     node_names.append(node_name)
 
-                        route = get_route(route_number, node_names)
+                        route = get_route(
+                            route_number, node_names, options['interactive'])
                         if route is None:
                             continue
 
@@ -299,7 +322,8 @@ class Command(BaseCommand):
                                                 route_number = extract_route_number_from_string(
                                                     str(route_number))
 
-                                                route = get_route(route_number, node_names)
+                                                route = get_route(
+                                                    route_number, node_names, options['interactive'])
                                                 if route is None:
                                                     continue
                                             time_obj = Time(
