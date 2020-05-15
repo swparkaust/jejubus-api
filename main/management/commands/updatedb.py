@@ -91,6 +91,13 @@ def get_all_stations():
     return data['response']['body']['items']['item']
 
 
+def get_first_cell(worksheet):
+    for row_cells in worksheet.iter_rows():
+        for cell in row_cells:
+            if cell.value is not None:
+                return cell
+
+
 def get_node_ids(node_name):
     return [x.station_id for x in Station.objects.filter(station_name__contains=node_name)]
 
@@ -265,13 +272,14 @@ class Command(BaseCommand):
                     wb = load_workbook(filename=entry.path, data_only=True)
 
                     for sheet in tqdm(wb.worksheets):
-                        route_number = sheet['B2'].value if sheet['A1'].value is None else sheet[
-                            'A1'].value
+                        first_cell = get_first_cell(sheet)
+
+                        route_number = first_cell.value
                         route_number = extract_route_number_from_string(
                             route_number)
 
                         node_names = []
-                        row = 7 if sheet['A1'].value is None else 6
+                        row = first_cell.offset(row=5).row
                         for cell in sheet[row]:
                             node_name = cell.value
                             if node_name is not None:
@@ -289,8 +297,7 @@ class Command(BaseCommand):
                         route_number_column = None
                         last = None
                         i = 0
-                        row = sheet[7] if sheet['A1'].value is None else sheet[6]
-                        for cell in row:
+                        for cell in sheet[row]:
                             node_name = cell.value
                             if node_name is not None:
                                 node_name = "".join(node_name.split())
