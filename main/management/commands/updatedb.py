@@ -1,8 +1,8 @@
 import datetime
 import difflib
-import inquirer
 import os
 import re
+import inquirer
 import requests
 import requests_cache
 import xmltodict
@@ -71,8 +71,8 @@ def get_all_route_nodes(route_id):
     data = xmltodict.parse(r.content)
 
     return data['response']['body']['items']['item']
-    
-    
+
+
 def get_all_routes():
     url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Bus'
 
@@ -80,8 +80,8 @@ def get_all_routes():
     data = xmltodict.parse(r.content)
 
     return data['response']['body']['items']['item']
-    
-    
+
+
 def get_all_stations():
     url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Station'
 
@@ -111,7 +111,8 @@ def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
                 if route_node['stationId'] == o.station_id:
                     return route_node
     if interactive:
-        choices = [Station.objects.get(station_id=x['stationId']).station_name for x in all_route_nodes]
+        choices = [Station.objects.get(
+            station_id=x['stationId']).station_name for x in all_route_nodes]
         if choices:
             matches = difflib.get_close_matches(
                 node_name, choices, len(choices), 0)
@@ -144,7 +145,8 @@ def get_route_nodes(route_id, node_names):
         if last is None:
             route_node = get_route_node(route_id, node_name, 0, 1, False)
         else:
-            route_node = get_route_node(route_id, node_name, last, -(len(node_names) - i - 1) or None, False)
+            route_node = get_route_node(
+                route_id, node_name, last, -(len(node_names) - i - 1) or None, False)
         if route_node is None:
             continue
         route_nodes.append(route_node)
@@ -222,7 +224,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         requests_cache.install_cache('jejubus_cache')
-        
+
         if options['clear_history']:
             self.stdout.write('Clearing station find history ... ', ending='')
             StationOtherName.objects.all().delete()
@@ -234,25 +236,27 @@ class Command(BaseCommand):
             Route.objects.all().delete()
             Station.objects.all().delete()
             self.stdout.write('done.')
-            
+
         for route_type in settings.ROUTE_TYPES:
             download(
                 "http://bus.jeju.go.kr/publicTrafficInformation/downloadSchedule/" +
                 route_type,
                 dest_folder="temp")
-                
+
         self.stdout.write('Saving routes ... ', ending='')
         for route in get_all_routes():
-            route_obj = Route(route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
+            route_obj = Route(
+                route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
             route_obj.save()
         self.stdout.write('done.')
-            
+
         self.stdout.write('Saving stations ... ', ending='')
         for station in get_all_stations():
-            station_obj = Station(station_id=station['stationId'], station_name=station['stationNm'])
+            station_obj = Station(
+                station_id=station['stationId'], station_name=station['stationNm'])
             station_obj.save()
         self.stdout.write('done.')
-        
+
         with os.scandir("temp") as it:
             for entry in tqdm(it):
                 if entry.name.endswith(".xlsx") and entry.is_file():
@@ -296,14 +300,17 @@ class Command(BaseCommand):
                                     node_name = extract_node_name_from_string(
                                         node_name)
                                     if last is None:
-                                        route_node = get_route_node(route.route_id, node_name, 0, 1, options['interactive'])
+                                        route_node = get_route_node(
+                                            route.route_id, node_name, 0, 1, options['interactive'])
                                     else:
-                                        route_node = get_route_node(route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
+                                        route_node = get_route_node(
+                                            route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
                                     if route_node is None:
                                         continue
                                     last = int(route_node['stationOrd'])
                                     i += 1
-                                    station = Station.objects.get(station_id=route_node['stationId'])
+                                    station = Station.objects.get(
+                                        station_id=route_node['stationId'])
                                     node_name = station.station_name
                                     for cell2 in sheet[cell.column][cell.row + 1:]:
                                         time = cell2.value
