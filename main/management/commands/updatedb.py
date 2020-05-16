@@ -265,84 +265,91 @@ class Command(BaseCommand):
         self.stdout.write('done.')
 
         with os.scandir("temp") as it:
-            for entry in tqdm(it):
-                if entry.name.endswith(".xlsx") and entry.is_file():
-                    self.stdout.write("{} {}".format(entry.name, entry.path))
+            items = (entry for entry in it if entry.name.endswith(
+                ".xlsx") and entry.is_file())
 
-                    wb = load_workbook(filename=entry.path, data_only=True)
+            pbar = tqdm(items, total=len(os.listdir("temp")))
+            for entry in pbar:
+                pbar.set_description("Processing %s" % entry.name)
 
-                    for sheet in tqdm(wb.worksheets):
-                        first_cell = get_first_cell(sheet)
+                wb = load_workbook(filename=entry.path, data_only=True)
 
-                        route_number = first_cell.value
-                        route_number = extract_route_number_from_string(
-                            route_number)
+                pbar2 = tqdm(wb.worksheets)
+                for sheet in pbar2:
+                    first_cell = get_first_cell(sheet)
 
-                        node_names = []
-                        row = first_cell.offset(row=5).row
-                        for cell in sheet[row]:
-                            node_name = cell.value
-                            if node_name is not None:
-                                node_name = "".join(node_name.split())
-                                if node_name != "노선번호" and node_name != "구분" and node_name != "비고":
-                                    node_name = extract_node_name_from_string(
-                                        node_name)
-                                    node_names.append(node_name)
+                    route_number = first_cell.value
+                    route_number = extract_route_number_from_string(
+                        route_number)
 
-                        route = get_route(
-                            route_number, node_names, options['interactive'])
-                        if route is None:
-                            continue
+                    node_names = []
+                    row = first_cell.offset(row=5).row
+                    for cell in sheet[row]:
+                        node_name = cell.value
+                        if node_name is not None:
+                            node_name = "".join(node_name.split())
+                            if node_name != "노선번호" and node_name != "구분" and node_name != "비고":
+                                node_name = extract_node_name_from_string(
+                                    node_name)
+                                node_names.append(node_name)
 
-                        route_number_column = None
-                        last = None
-                        i = 0
-                        for cell in sheet[row]:
-                            node_name = cell.value
-                            if node_name is not None:
-                                node_name = "".join(node_name.split())
-                                if node_name == "노선번호":
-                                    route_number_column = cell.column_letter
-                                elif node_name != "구분" and node_name != "비고":
-                                    node_name = extract_node_name_from_string(
-                                        node_name)
-                                    if last is None:
-                                        route_node = get_route_node(
-                                            route.route_id, node_name, 0, 1, options['interactive'])
-                                    else:
-                                        route_node = get_route_node(
-                                            route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
-                                    if route_node is None:
-                                        continue
-                                    last = int(route_node['stationOrd'])
-                                    i += 1
-                                    station = Station.objects.get(
-                                        station_id=route_node['stationId'])
-                                    node_name = station.station_name
-                                    for cell2 in sheet[cell.column][cell.row + 1:]:
-                                        time = cell2.value
-                                        if time is not None:
-                                            if isinstance(time, str):
-                                                time = extract_time_from_string(
-                                                    time)
-                                                if time is None:
-                                                    continue
-                                            elif type(time) is not datetime.time:
+                    route = get_route(
+                        route_number, node_names, options['interactive'])
+                    if route is None:
+                        continue
+
+                    pbar2.set_description(
+                        "Processing route %s" % route.route_number)
+
+                    route_number_column = None
+                    last = None
+                    i = 0
+                    for cell in sheet[row]:
+                        node_name = cell.value
+                        if node_name is not None:
+                            node_name = "".join(node_name.split())
+                            if node_name == "노선번호":
+                                route_number_column = cell.column_letter
+                            elif node_name != "구분" and node_name != "비고":
+                                node_name = extract_node_name_from_string(
+                                    node_name)
+                                if last is None:
+                                    route_node = get_route_node(
+                                        route.route_id, node_name, 0, 1, options['interactive'])
+                                else:
+                                    route_node = get_route_node(
+                                        route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
+                                if route_node is None:
+                                    continue
+                                last = int(route_node['stationOrd'])
+                                i += 1
+                                station = Station.objects.get(
+                                    station_id=route_node['stationId'])
+                                node_name = station.station_name
+                                for cell2 in sheet[cell.column][cell.row + 1:]:
+                                    time = cell2.value
+                                    if time is not None:
+                                        if isinstance(time, str):
+                                            time = extract_time_from_string(
+                                                time)
+                                            if time is None:
                                                 continue
-                                            if route_number_column is not None:
-                                                cell_name = "{}{}".format(
-                                                    route_number_column, cell2.row)
-                                                route_number = sheet[cell_name].value
-                                                route_number = extract_route_number_from_string(
-                                                    str(route_number))
+                                        elif type(time) is not datetime.time:
+                                            continue
+                                        if route_number_column is not None:
+                                            cell_name = "{}{}".format(
+                                                route_number_column, cell2.row)
+                                            route_number = sheet[cell_name].value
+                                            route_number = extract_route_number_from_string(
+                                                str(route_number))
 
-                                                route = get_route(
-                                                    route_number, node_names, options['interactive'])
-                                                if route is None:
-                                                    continue
-                                            time_obj = Time(
-                                                route=route, station=station, time=time)
-                                            time_obj.save()
+                                            route = get_route(
+                                                route_number, node_names, options['interactive'])
+                                            if route is None:
+                                                continue
+                                        time_obj = Time(
+                                            route=route, station=station, time=time)
+                                        time_obj.save()
 
         self.stdout.write(self.style.SUCCESS(
             'Successfully updated the database'))
