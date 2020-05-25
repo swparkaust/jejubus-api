@@ -260,7 +260,7 @@ class Command(BaseCommand):
         self.stdout.write('Saving stations ... ', ending='')
         for station in get_all_stations():
             station_obj = Station(
-                station_id=station['stationId'], station_name=station['stationNm'])
+                local_x=station['localX'], local_y=station['localY'], station_id=station['stationId'], station_name=station['stationNm'])
             station_obj.save()
         self.stdout.write('done.')
 

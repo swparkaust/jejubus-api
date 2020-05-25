@@ -2,6 +2,8 @@ from django.db import models
 
 
 class Station(models.Model):
+    local_x = models.DecimalField(max_digits=9, decimal_places=6)
+    local_y = models.DecimalField(max_digits=9, decimal_places=6)
     station_id = models.CharField(max_length=30, primary_key=True)
     station_name = models.CharField(max_length=30)
 
