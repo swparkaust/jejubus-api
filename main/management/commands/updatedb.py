@@ -11,8 +11,9 @@ from tqdm import tqdm
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models import Func, F
 
-from main.models import Route, Station, StationOtherName, Time
+from main.models import Route, Station, StationOtherName, StationRoute, Time
 
 
 def download(url: str, dest_folder: str):
@@ -63,18 +64,17 @@ def extract_time_from_string(s):
         return datetime.time(int(matches[0][0]), int(matches[0][1]), 0)
 
 
-def get_all_route_nodes(route_id):
-    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/StationRoutePr'
-    payload = {'route': route_id}
+def get_all_routes():
+    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Bus'
 
-    r = requests.get(url, params=payload)
+    r = requests.get(url)
     data = xmltodict.parse(r.content)
 
     return data['response']['body']['items']['item']
 
 
-def get_all_routes():
-    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/Bus'
+def get_all_station_routes():
+    url = 'http://busopen.jeju.go.kr/OpenAPI/service/bis/StationRoute'
 
     r = requests.get(url)
     data = xmltodict.parse(r.content)
@@ -104,22 +104,22 @@ def get_node_ids(node_name):
 
 def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
     sl = slice(start, end)
-    all_route_nodes = get_all_route_nodes(route_id)[sl]
+    station_routes = list(StationRoute.objects.filter(
+        route__route_id=route_id).order_by('station_order'))[sl]
     node_ids = get_node_ids(node_name)
-    for route_node in all_route_nodes:
+    for station_route in station_routes:
         for node_id in node_ids:
-            if route_node['stationId'] == node_id:
-                return route_node
+            if station_route.station.station_id == node_id:
+                return station_route
     station_other_names = StationOtherName.objects.filter(
         other_station_name=node_name)
     if station_other_names.exists():
-        for route_node in all_route_nodes:
+        for station_route in station_routes:
             for o in station_other_names:
-                if route_node['stationId'] == o.station_id:
-                    return route_node
+                if station_route.station.station_id == o.station_id:
+                    return station_route
     if interactive:
-        choices = [Station.objects.get(
-            station_id=x['stationId']).station_name for x in all_route_nodes]
+        choices = [x.station.station_name for x in station_routes]
         if choices:
             matches = difflib.get_close_matches(
                 node_name, choices, len(choices), 0)
@@ -133,10 +133,10 @@ def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
             if answers is None:
                 return None
             else:
-                selected_node = all_route_nodes[choices.index(
+                selected_node = station_routes[choices.index(
                     answers["node_name"])]
                 station_other_name = StationOtherName(
-                    station_id=selected_node['stationId'], other_station_name=node_name)
+                    station_id=selected_node.station.station_id, other_station_name=node_name)
                 station_other_name.save()
                 return selected_node
         else:
@@ -157,14 +157,14 @@ def get_route_nodes(route_id, node_names):
         if route_node is None:
             continue
         route_nodes.append(route_node)
-        last = int(route_node['stationOrd'])
+        last = route_node.station_order
     return route_nodes
 
 
 def get_route(route_number, node_names, interactive=True):
     routes = Route.objects.filter(route_number__contains=route_number)
     if routes:
-        choices = [[Station.objects.get(station_id=x['stationId']).station_name for x in get_route_nodes(
+        choices = [[x.station.station_name for x in get_route_nodes(
             route.route_id, node_names)] for route in routes]
         if choices:
             matches = sorted(choices, key=len, reverse=True)
@@ -184,11 +184,10 @@ def get_route(route_number, node_names, interactive=True):
                         answers["route"])]
             else:
                 selected_route = routes[choices.index(matches[0])]
-            all_route_nodes = get_all_route_nodes(selected_route.route_id)
-            start_station = Station.objects.get(
-                station_id=all_route_nodes[0]['stationId'])
-            end_station = Station.objects.get(
-                station_id=all_route_nodes[-1]['stationId'])
+            station_routes = StationRoute.objects.filter(
+                route__route_id=selected_route.route_id).order_by('station_order')
+            start_station = station_routes.first().station
+            end_station = station_routes.last().station
             if start_station.station_name != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
                 start_station_other_name = StationOtherName(
                     station_id=start_station.station_id, other_station_name=node_names[0])
@@ -240,6 +239,7 @@ class Command(BaseCommand):
         if options['clear_db']:
             self.stdout.write('Clearing database ... ', ending='')
             Time.objects.all().delete()
+            StationRoute.objects.all().delete()
             Route.objects.all().delete()
             Station.objects.all().delete()
             self.stdout.write('done.')
@@ -262,6 +262,16 @@ class Command(BaseCommand):
             station_obj = Station(
                 local_x=station['localX'], local_y=station['localY'], station_id=station['stationId'], station_name=station['stationNm'])
             station_obj.save()
+        self.stdout.write('done.')
+
+        self.stdout.write('Saving Station/Route relationships ... ', ending='')
+        for station_route in get_all_station_routes():
+            route = Route.objects.get(route_id=station_route['routeId'])
+            station = Station.objects.get(
+                station_id=station_route['stationId'])
+            station_route_obj = StationRoute(
+                route=route, station=station, station_order=int(station_route['stationOrd']))
+            station_route_obj.save()
         self.stdout.write('done.')
 
         with os.scandir("temp") as it:
@@ -321,10 +331,9 @@ class Command(BaseCommand):
                                         route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
                                 if route_node is None:
                                     continue
-                                last = int(route_node['stationOrd'])
+                                last = route_node.station_order
                                 i += 1
-                                station = Station.objects.get(
-                                    station_id=route_node['stationId'])
+                                station = route_node.station
                                 node_name = station.station_name
                                 for cell2 in sheet[cell.column][cell.row + 1:]:
                                     time = cell2.value
@@ -347,9 +356,12 @@ class Command(BaseCommand):
                                                 route_number, node_names, options['interactive'])
                                             if route is None:
                                                 continue
-                                        time_obj = Time(
-                                            route=route, station=station, time=time)
-                                        time_obj.save()
+                                        station_route = StationRoute.objects.filter(route=route, station=station).annotate(abs_diff=Func((F('station_order') - 1) / (StationRoute.objects.filter(
+                                            route=route).count() - 1) - (route_node.station_order - 1) / (StationRoute.objects.filter(route=route_node.route).count() - 1), function='ABS')).order_by('abs_diff').first()
+                                        if station_route:
+                                            time_obj = Time(
+                                                station_route=station_route, time=time)
+                                            time_obj.save()
 
         self.stdout.write(self.style.SUCCESS(
             'Successfully updated the database'))

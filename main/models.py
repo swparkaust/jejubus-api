@@ -28,9 +28,14 @@ class Route(models.Model):
         return self.route_id + '|' + self.route_number
 
 
-class Time(models.Model):
+class StationRoute(models.Model):
     route = models.ForeignKey(Route, on_delete=models.CASCADE)
     station = models.ForeignKey(Station, on_delete=models.CASCADE)
+    station_order = models.PositiveIntegerField()
+
+
+class Time(models.Model):
+    station_route = models.ForeignKey(StationRoute, on_delete=models.CASCADE)
     time = models.TimeField()
 
     def __str__(self):
