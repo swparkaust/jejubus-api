@@ -2,6 +2,7 @@ import datetime
 import difflib
 import os
 import re
+import sys
 import inquirer
 import requests
 import requests_cache
@@ -232,17 +233,19 @@ class Command(BaseCommand):
         requests_cache.install_cache('jejubus_cache')
 
         if options['clear_history']:
-            self.stdout.write('Clearing station find history ... ', ending='')
+            sys.stdout.write('Clearing station find history ... ')
+            sys.stdout.flush()
             StationOtherName.objects.all().delete()
-            self.stdout.write('done.')
+            sys.stdout.write('done.\n')
 
         if options['clear_db']:
-            self.stdout.write('Clearing database ... ', ending='')
+            sys.stdout.write('Clearing database ... ')
+            sys.stdout.flush()
             Time.objects.all().delete()
             StationRoute.objects.all().delete()
             Route.objects.all().delete()
             Station.objects.all().delete()
-            self.stdout.write('done.')
+            sys.stdout.write('done.\n')
 
         for route_type in settings.ROUTE_TYPES:
             download(
@@ -250,21 +253,24 @@ class Command(BaseCommand):
                 route_type,
                 dest_folder="temp")
 
-        self.stdout.write('Saving routes ... ', ending='')
+        sys.stdout.write('Saving routes ... ')
+        sys.stdout.flush()
         for route in get_all_routes():
             route_obj = Route(
                 route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
             route_obj.save()
-        self.stdout.write('done.')
+        sys.stdout.write('done.\n')
 
-        self.stdout.write('Saving stations ... ', ending='')
+        sys.stdout.write('Saving stations ... ')
+        sys.stdout.flush()
         for station in get_all_stations():
             station_obj = Station(
                 local_x=station['localX'], local_y=station['localY'], station_id=station['stationId'], station_name=station['stationNm'])
             station_obj.save()
-        self.stdout.write('done.')
+        sys.stdout.write('done.\n')
 
-        self.stdout.write('Saving station routes ... ', ending='')
+        sys.stdout.write('Saving station routes ... ')
+        sys.stdout.flush()
         for station_route in get_all_station_routes():
             route = Route.objects.get(route_id=station_route['routeId'])
             station = Station.objects.get(
@@ -272,7 +278,7 @@ class Command(BaseCommand):
             station_route_obj = StationRoute(
                 route=route, station=station, station_order=int(station_route['stationOrd']))
             station_route_obj.save()
-        self.stdout.write('done.')
+        sys.stdout.write('done.\n')
 
         with os.scandir("temp") as it:
             items = (entry for entry in it if entry.name.endswith(
@@ -363,5 +369,5 @@ class Command(BaseCommand):
                                                 station_route=station_route, time=time)
                                             time_obj.save()
 
-        self.stdout.write(self.style.SUCCESS(
-            'Successfully updated the database'))
+        sys.stdout.write(self.style.SUCCESS(
+            'Successfully updated the database\n'))
