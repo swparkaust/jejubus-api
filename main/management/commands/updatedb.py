@@ -120,22 +120,22 @@ def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
                 if station_route.station.station_id == o.station_id:
                     return station_route
     if interactive:
-        choices = [x.station.station_name for x in station_routes]
+        choices = [(station_route.station.station_name, i)
+                   for i, station_route in enumerate(station_routes)]
         if choices:
-            matches = difflib.get_close_matches(
-                node_name, choices, len(choices), 0)
+            choices.sort(key=lambda x: difflib.SequenceMatcher(
+                None, x[0], node_name).ratio(), reverse=True)
             questions = [
                 inquirer.List(
                     'node_name',
                     message="What node is " + node_name + "?",
-                    choices=matches, ),
+                    choices=choices, ),
             ]
             answers = inquirer.prompt(questions)
             if answers is None:
                 return None
             else:
-                selected_node = station_routes[choices.index(
-                    answers["node_name"])]
+                selected_node = station_routes[answers["node_name"]]
                 station_other_name = StationOtherName(
                     station_id=selected_node.station.station_id, other_station_name=node_name)
                 station_other_name.save()
@@ -165,26 +165,28 @@ def get_route_nodes(route_id, node_names):
 def get_route(route_number, node_names, interactive=True):
     routes = Route.objects.filter(route_number__contains=route_number)
     if routes:
-        choices = [[x.station.station_name for x in get_route_nodes(
-            route.route_id, node_names)] for route in routes]
+        route_nodes_list = [get_route_nodes(
+            route.route_id, node_names) for route in routes]
+        choices = [("-".join([x.station.station_name for x in route_nodes]), i)
+                   for i, route_nodes in enumerate(route_nodes_list)]
         if choices:
-            matches = sorted(choices, key=len, reverse=True)
+            choices.sort(key=lambda x: len(
+                route_nodes_list[x[1]]), reverse=True)
             if interactive:
                 questions = [
                     inquirer.List(
                         'route',
                         message="What route is " + route_number +
                         " " + "-".join(node_names) + "?",
-                        choices=matches, ),
+                        choices=choices, ),
                 ]
                 answers = inquirer.prompt(questions)
                 if answers is None:
                     return None
                 else:
-                    selected_route = routes[choices.index(
-                        answers["route"])]
+                    selected_route = routes[answers["route"]]
             else:
-                selected_route = routes[choices.index(matches[0])]
+                selected_route = routes[choices[0][1]]
             station_routes = StationRoute.objects.filter(
                 route__route_id=selected_route.route_id).order_by('station_order')
             start_station = station_routes.first().station
