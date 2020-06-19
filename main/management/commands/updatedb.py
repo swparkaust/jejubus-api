@@ -100,7 +100,7 @@ def get_first_cell(worksheet):
 
 
 def get_node_ids(node_name):
-    return [x.station_id for x in Station.objects.filter(station_name__contains=node_name)]
+    return [x.station_id for x in Station.objects.filter(station_name__icontains=node_name)]
 
 
 def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
@@ -163,7 +163,7 @@ def get_route_nodes(route_id, node_names):
 
 
 def get_route(route_number, node_names, interactive=True):
-    routes = Route.objects.filter(route_number__contains=route_number)
+    routes = Route.objects.filter(route_number__icontains=route_number)
     if routes:
         route_nodes_list = [get_route_nodes(
             route.route_id, node_names) for route in routes]
