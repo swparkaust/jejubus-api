@@ -42,12 +42,16 @@ class StationRouteViewSet(viewsets.ModelViewSet):
         route_id = self.request.query_params.get('route_id', None)
         station_id = self.request.query_params.get('station_id', None)
         station_order = self.request.query_params.get('station_order', None)
+        up_down_direction = self.request.query_params.get(
+            'up_down_direction', None)
         if route_id is not None:
             queryset = queryset.filter(route__route_id=route_id)
         if station_id is not None:
             queryset = queryset.filter(station__station_id=station_id)
         if station_order is not None:
             queryset = queryset.filter(station_order=station_order)
+        if up_down_direction is not None:
+            queryset = queryset.filter(up_down_direction=up_down_direction)
         queryset = queryset.order_by('station_order')
         return queryset
 
@@ -60,10 +64,15 @@ class TimeViewSet(viewsets.ModelViewSet):
         queryset = Time.objects.all()
         route_id = self.request.query_params.get('route_id', None)
         station_id = self.request.query_params.get('station_id', None)
+        up_down_direction = self.request.query_params.get(
+            'up_down_direction', None)
         if route_id is not None:
             queryset = queryset.filter(station_route__route__route_id=route_id)
         if station_id is not None:
             queryset = queryset.filter(
                 station_route__station__station_id=station_id)
+        if up_down_direction is not None:
+            queryset = queryset.filter(
+                station_route__up_down_direction=up_down_direction)
         queryset = queryset.order_by('time')
         return queryset

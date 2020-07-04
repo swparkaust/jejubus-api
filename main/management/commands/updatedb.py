@@ -277,8 +277,8 @@ class Command(BaseCommand):
             route = Route.objects.get(route_id=station_route['routeId'])
             station = Station.objects.get(
                 station_id=station_route['stationId'])
-            station_route_obj = StationRoute(
-                route=route, station=station, station_order=int(station_route['stationOrd']))
+            station_route_obj = StationRoute(route=route, station=station, station_order=int(
+                station_route['stationOrd']), up_down_direction=station_route['updnDir'])
             station_route_obj.save()
         sys.stdout.write('done.\n')
 

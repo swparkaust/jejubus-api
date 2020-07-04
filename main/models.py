@@ -32,6 +32,7 @@ class StationRoute(models.Model):
     route = models.ForeignKey(Route, on_delete=models.CASCADE)
     station = models.ForeignKey(Station, on_delete=models.CASCADE)
     station_order = models.PositiveIntegerField()
+    up_down_direction = models.CharField(max_length=20)
 
 
 class Time(models.Model):
