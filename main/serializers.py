@@ -34,4 +34,5 @@ class TimeSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Time
-        fields = ('route_id', 'station_id', 'up_down_direction', 'time')
+        fields = ('holiday_type', 'route_id', 'station_id',
+                  'up_down_direction', 'time')

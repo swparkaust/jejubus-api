@@ -38,6 +38,26 @@ def download(url: str, dest_folder: str):
         print("Download failed: status code {}\n{}".format(r.status_code, r.text))
 
 
+def extract_holiday_types_from_string(s):
+    pattern = r'(평|토(?:요)?|공휴|주말)(?:일)?'
+    matches = re.findall(pattern, s)
+    if not matches:
+        return ["1", "2", "3"]
+    else:
+        holiday_types = []
+        for match in matches:
+            if match == "평":
+                holiday_types.append("1")
+            elif match == "토":
+                holiday_types.append("2")
+            elif match == "공휴":
+                holiday_types.append("3")
+            elif match == "주말":
+                holiday_types.append("2")
+                holiday_types.append("3")
+        return holiday_types
+
+
 def extract_node_name_from_string(s):
     pattern = r'(.*?)(?:\(.*\))?(?:\[.*\])?$'
     matches = re.findall(pattern, s)
@@ -297,6 +317,8 @@ class Command(BaseCommand):
                     first_cell = get_first_cell(sheet)
 
                     route_number = first_cell.value
+                    holiday_types = extract_holiday_types_from_string(
+                        route_number)
                     route_number = extract_route_number_from_string(
                         route_number)
 
@@ -367,9 +389,10 @@ class Command(BaseCommand):
                                         station_route = StationRoute.objects.filter(route=route, station=station).annotate(abs_diff=Func((F('station_order') - 1) / (StationRoute.objects.filter(
                                             route=route).count() - 1) - (route_node.station_order - 1) / (StationRoute.objects.filter(route=route_node.route).count() - 1), function='ABS')).order_by('abs_diff').first()
                                         if station_route:
-                                            time_obj = Time(
-                                                station_route=station_route, time=time)
-                                            time_obj.save()
+                                            for holiday_type in holiday_types:
+                                                time_obj = Time(
+                                                    holiday_type=holiday_type, station_route=station_route, time=time)
+                                                time_obj.save()
 
         sys.stdout.write(self.style.SUCCESS(
             'Successfully updated the database\n'))

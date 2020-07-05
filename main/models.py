@@ -36,6 +36,7 @@ class StationRoute(models.Model):
 
 
 class Time(models.Model):
+    holiday_type = models.CharField(max_length=20)
     station_route = models.ForeignKey(StationRoute, on_delete=models.CASCADE)
     time = models.TimeField()
 

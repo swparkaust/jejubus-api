@@ -62,10 +62,13 @@ class TimeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Time.objects.all()
+        holiday_type = self.request.query_params.get('holiday_type', None)
         route_id = self.request.query_params.get('route_id', None)
         station_id = self.request.query_params.get('station_id', None)
         up_down_direction = self.request.query_params.get(
             'up_down_direction', None)
+        if holiday_type is not None:
+            queryset = queryset.filter(holiday_type=holiday_type)
         if route_id is not None:
             queryset = queryset.filter(station_route__route__route_id=route_id)
         if station_id is not None:
