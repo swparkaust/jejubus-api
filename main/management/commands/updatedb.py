@@ -8,7 +8,6 @@ import tempfile
 from contextlib import contextmanager
 import inquirer
 import requests
-import requests_cache
 import xmltodict
 from openpyxl import load_workbook
 from tqdm import tqdm
@@ -267,8 +266,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        requests_cache.install_cache('jejubus_cache')
-
         if options['clear_history']:
             sys.stdout.write('Clearing station find history ... ')
             sys.stdout.flush()
