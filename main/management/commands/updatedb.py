@@ -2,7 +2,10 @@ import datetime
 import difflib
 import os
 import re
+import shutil
 import sys
+import tempfile
+from contextlib import contextmanager
 import inquirer
 import requests
 import requests_cache
@@ -226,6 +229,18 @@ def get_route(route_number, node_names, interactive=True):
         return None
 
 
+@contextmanager
+def tempdir():
+    path = tempfile.mkdtemp()
+    try:
+        yield path
+    finally:
+        try:
+            shutil.rmtree(path)
+        except IOError:
+            sys.stderr.write('Failed to clean up temp dir {}'.format(path))
+
+
 class Command(BaseCommand):
 
     help = 'Updates the database via Bus Info API'
@@ -269,130 +284,131 @@ class Command(BaseCommand):
             Station.objects.all().delete()
             sys.stdout.write('done.\n')
 
-        for route_type in settings.ROUTE_TYPES:
-            download(
-                "http://bus.jeju.go.kr/publicTrafficInformation/downloadSchedule/" +
-                route_type,
-                dest_folder="temp")
+        with tempdir() as base_dir:
+            for route_type in settings.ROUTE_TYPES:
+                download(
+                    "http://bus.jeju.go.kr/publicTrafficInformation/downloadSchedule/" +
+                    route_type,
+                    dest_folder=base_dir)
 
-        sys.stdout.write('Saving routes ... ')
-        sys.stdout.flush()
-        for route in get_all_routes():
-            route_obj = Route(
-                route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
-            route_obj.save()
-        sys.stdout.write('done.\n')
+            sys.stdout.write('Saving routes ... ')
+            sys.stdout.flush()
+            for route in get_all_routes():
+                route_obj = Route(
+                    route_type=route['routeTp'], route_id=route['routeId'], route_number=route['routeNum'])
+                route_obj.save()
+            sys.stdout.write('done.\n')
 
-        sys.stdout.write('Saving stations ... ')
-        sys.stdout.flush()
-        for station in get_all_stations():
-            station_obj = Station(
-                local_x=station['localX'], local_y=station['localY'], station_id=station['stationId'], station_name=station['stationNm'])
-            station_obj.save()
-        sys.stdout.write('done.\n')
+            sys.stdout.write('Saving stations ... ')
+            sys.stdout.flush()
+            for station in get_all_stations():
+                station_obj = Station(
+                    local_x=station['localX'], local_y=station['localY'], station_id=station['stationId'], station_name=station['stationNm'])
+                station_obj.save()
+            sys.stdout.write('done.\n')
 
-        sys.stdout.write('Saving station routes ... ')
-        sys.stdout.flush()
-        for station_route in get_all_station_routes():
-            route = Route.objects.get(route_id=station_route['routeId'])
-            station = Station.objects.get(
-                station_id=station_route['stationId'])
-            station_route_obj = StationRoute(route=route, station=station, station_order=int(
-                station_route['stationOrd']), up_down_direction=station_route['updnDir'])
-            station_route_obj.save()
-        sys.stdout.write('done.\n')
+            sys.stdout.write('Saving station routes ... ')
+            sys.stdout.flush()
+            for station_route in get_all_station_routes():
+                route = Route.objects.get(route_id=station_route['routeId'])
+                station = Station.objects.get(
+                    station_id=station_route['stationId'])
+                station_route_obj = StationRoute(route=route, station=station, station_order=int(
+                    station_route['stationOrd']), up_down_direction=station_route['updnDir'])
+                station_route_obj.save()
+            sys.stdout.write('done.\n')
 
-        with os.scandir("temp") as it:
-            items = (entry for entry in it if entry.name.endswith(
-                ".xlsx") and entry.is_file())
+            with os.scandir(base_dir) as it:
+                items = (entry for entry in it if entry.name.endswith(
+                    ".xlsx") and entry.is_file())
 
-            pbar = tqdm(items, total=len(os.listdir("temp")))
-            for entry in pbar:
-                pbar.set_description("Processing %s" % entry.name)
+                pbar = tqdm(items, total=len(os.listdir(base_dir)))
+                for entry in pbar:
+                    pbar.set_description("Processing %s" % entry.name)
 
-                wb = load_workbook(filename=entry.path, data_only=True)
+                    wb = load_workbook(filename=entry.path, data_only=True)
 
-                pbar2 = tqdm(wb.worksheets)
-                for sheet in pbar2:
-                    first_cell = get_first_cell(sheet)
+                    pbar2 = tqdm(wb.worksheets)
+                    for sheet in pbar2:
+                        first_cell = get_first_cell(sheet)
 
-                    route_number = first_cell.value
-                    holiday_types = extract_holiday_types_from_string(
-                        route_number)
-                    route_number = extract_route_number_from_string(
-                        route_number)
+                        route_number = first_cell.value
+                        holiday_types = extract_holiday_types_from_string(
+                            route_number)
+                        route_number = extract_route_number_from_string(
+                            route_number)
 
-                    node_names = []
-                    row = first_cell.offset(row=5).row
-                    for cell in sheet[row]:
-                        node_name = cell.value
-                        if node_name is not None:
-                            node_name = "".join(node_name.split())
-                            if node_name != "노선번호" and node_name != "구분" and node_name != "비고":
-                                node_name = extract_node_name_from_string(
-                                    node_name)
-                                node_names.append(node_name)
+                        node_names = []
+                        row = first_cell.offset(row=5).row
+                        for cell in sheet[row]:
+                            node_name = cell.value
+                            if node_name is not None:
+                                node_name = "".join(node_name.split())
+                                if node_name != "노선번호" and node_name != "구분" and node_name != "비고":
+                                    node_name = extract_node_name_from_string(
+                                        node_name)
+                                    node_names.append(node_name)
 
-                    route = get_route(
-                        route_number, node_names, options['interactive'])
-                    if route is None:
-                        continue
+                        route = get_route(
+                            route_number, node_names, options['interactive'])
+                        if route is None:
+                            continue
 
-                    pbar2.set_description(
-                        "Processing route %s" % route.route_number)
+                        pbar2.set_description(
+                            "Processing route %s" % route.route_number)
 
-                    route_number_column = None
-                    last = None
-                    i = 0
-                    for cell in sheet[row]:
-                        node_name = cell.value
-                        if node_name is not None:
-                            node_name = "".join(node_name.split())
-                            if node_name == "노선번호":
-                                route_number_column = cell.column_letter
-                            elif node_name != "구분" and node_name != "비고":
-                                node_name = extract_node_name_from_string(
-                                    node_name)
-                                if last is None:
-                                    route_node = get_route_node(
-                                        route.route_id, node_name, 0, 1, options['interactive'])
-                                else:
-                                    route_node = get_route_node(
-                                        route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
-                                if route_node is None:
-                                    continue
-                                last = route_node.station_order
-                                i += 1
-                                station = route_node.station
-                                node_name = station.station_name
-                                for cell2 in sheet[cell.column][cell.row + 1:]:
-                                    time = cell2.value
-                                    if time is not None:
-                                        if isinstance(time, str):
-                                            time = extract_time_from_string(
-                                                time)
-                                            if time is None:
+                        route_number_column = None
+                        last = None
+                        i = 0
+                        for cell in sheet[row]:
+                            node_name = cell.value
+                            if node_name is not None:
+                                node_name = "".join(node_name.split())
+                                if node_name == "노선번호":
+                                    route_number_column = cell.column_letter
+                                elif node_name != "구분" and node_name != "비고":
+                                    node_name = extract_node_name_from_string(
+                                        node_name)
+                                    if last is None:
+                                        route_node = get_route_node(
+                                            route.route_id, node_name, 0, 1, options['interactive'])
+                                    else:
+                                        route_node = get_route_node(
+                                            route.route_id, node_name, last, -(len(node_names) - i - 1) or None, options['interactive'])
+                                    if route_node is None:
+                                        continue
+                                    last = route_node.station_order
+                                    i += 1
+                                    station = route_node.station
+                                    node_name = station.station_name
+                                    for cell2 in sheet[cell.column][cell.row + 1:]:
+                                        time = cell2.value
+                                        if time is not None:
+                                            if isinstance(time, str):
+                                                time = extract_time_from_string(
+                                                    time)
+                                                if time is None:
+                                                    continue
+                                            elif type(time) is not datetime.time:
                                                 continue
-                                        elif type(time) is not datetime.time:
-                                            continue
-                                        if route_number_column is not None:
-                                            cell_name = "{}{}".format(
-                                                route_number_column, cell2.row)
-                                            route_number = sheet[cell_name].value
-                                            route_number = extract_route_number_from_string(
-                                                str(route_number))
+                                            if route_number_column is not None:
+                                                cell_name = "{}{}".format(
+                                                    route_number_column, cell2.row)
+                                                route_number = sheet[cell_name].value
+                                                route_number = extract_route_number_from_string(
+                                                    str(route_number))
 
-                                            route = get_route(
-                                                route_number, node_names, options['interactive'])
-                                            if route is None:
-                                                continue
-                                        station_route = StationRoute.objects.filter(route=route, station=station).annotate(abs_diff=Func((F('station_order') - 1) / (StationRoute.objects.filter(
-                                            route=route).count() - 1) - (route_node.station_order - 1) / (StationRoute.objects.filter(route=route_node.route).count() - 1), function='ABS')).order_by('abs_diff').first()
-                                        if station_route:
-                                            for holiday_type in holiday_types:
-                                                time_obj = Time(
-                                                    holiday_type=holiday_type, station_route=station_route, time=time)
-                                                time_obj.save()
+                                                route = get_route(
+                                                    route_number, node_names, options['interactive'])
+                                                if route is None:
+                                                    continue
+                                            station_route = StationRoute.objects.filter(route=route, station=station).annotate(abs_diff=Func((F('station_order') - 1) / (StationRoute.objects.filter(
+                                                route=route).count() - 1) - (route_node.station_order - 1) / (StationRoute.objects.filter(route=route_node.route).count() - 1), function='ABS')).order_by('abs_diff').first()
+                                            if station_route:
+                                                for holiday_type in holiday_types:
+                                                    time_obj = Time(
+                                                        holiday_type=holiday_type, station_route=station_route, time=time)
+                                                    time_obj.save()
 
         sys.stdout.write(self.style.SUCCESS(
             'Successfully updated the database\n'))
