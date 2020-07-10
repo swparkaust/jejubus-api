@@ -16,7 +16,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Func, F
 
-from main.models import Route, Station, StationOtherName, StationRoute, Time
+from main.models import Route, Station, StationSynonym, StationRoute, Time
 
 
 def download(url: str, dest_folder: str):
@@ -134,11 +134,10 @@ def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
         for node_id in node_ids:
             if station_route.station.station_id == node_id:
                 return station_route
-    station_other_names = StationOtherName.objects.filter(
-        other_station_name=node_name)
-    if station_other_names.exists():
+    station_synonyms = StationSynonym.objects.filter(synonym=node_name)
+    if station_synonyms.exists():
         for station_route in station_routes:
-            for o in station_other_names:
+            for o in station_synonyms:
                 if station_route.station.station_id == o.station_id:
                     return station_route
     if interactive:
@@ -158,9 +157,9 @@ def get_route_node(route_id, node_name, start=None, end=None, interactive=True):
                 return None
             else:
                 selected_node = station_routes[answers["node_name"]]
-                station_other_name = StationOtherName(
-                    station_id=selected_node.station.station_id, other_station_name=node_name)
-                station_other_name.save()
+                station_synonym = StationSynonym(
+                    station_id=selected_node.station.station_id, synonym=node_name)
+                station_synonym.save()
                 return selected_node
         else:
             return None
@@ -213,14 +212,14 @@ def get_route(route_number, node_names, interactive=True):
                 route__route_id=selected_route.route_id).order_by('station_order')
             start_station = station_routes.first().station
             end_station = station_routes.last().station
-            if start_station.station_name != node_names[0] and not StationOtherName.objects.filter(other_station_name=node_names[0]).exists():
-                start_station_other_name = StationOtherName(
-                    station_id=start_station.station_id, other_station_name=node_names[0])
-                start_station_other_name.save()
-            if end_station.station_name != node_names[-1] and not StationOtherName.objects.filter(other_station_name=node_names[-1]).exists():
-                end_station_other_name = StationOtherName(
-                    station_id=end_station.station_id, other_station_name=node_names[-1])
-                end_station_other_name.save()
+            if start_station.station_name != node_names[0] and not StationSynonym.objects.filter(synonym=node_names[0]).exists():
+                start_station_synonym = StationSynonym(
+                    station_id=start_station.station_id, synonym=node_names[0])
+                start_station_synonym.save()
+            if end_station.station_name != node_names[-1] and not StationSynonym.objects.filter(synonym=node_names[-1]).exists():
+                end_station_synonym = StationSynonym(
+                    station_id=end_station.station_id, synonym=node_names[-1])
+                end_station_synonym.save()
             return selected_route
         else:
             return None
@@ -246,10 +245,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--clear-history',
+            '--clear-synonyms',
             action='store_true',
-            dest='clear_history',
-            help='Clean station find history',
+            dest='clear_synonyms',
+            help='Clean station synonyms',
         )
         parser.add_argument(
             '--clear-db',
@@ -266,10 +265,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        if options['clear_history']:
-            sys.stdout.write('Clearing station find history ... ')
+        if options['clear_synonyms']:
+            sys.stdout.write('Clearing station synonyms ... ')
             sys.stdout.flush()
-            StationOtherName.objects.all().delete()
+            StationSynonym.objects.all().delete()
             sys.stdout.write('done.\n')
 
         if options['clear_db']:

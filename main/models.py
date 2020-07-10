@@ -11,12 +11,12 @@ class Station(models.Model):
         return self.station_id + '|' + self.station_name
 
 
-class StationOtherName(models.Model):
+class StationSynonym(models.Model):
     station_id = models.CharField(max_length=30)
-    other_station_name = models.CharField(max_length=30)
+    synonym = models.CharField(max_length=30)
 
     def __str__(self):
-        return self.station_id + '|' + self.other_station_name
+        return self.station_id + '|' + self.synonym
 
 
 class Route(models.Model):
