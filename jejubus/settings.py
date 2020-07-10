@@ -124,6 +124,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 ROUTE_TYPES = [
     "fast", "global", "jejuGlobal", "jejuLocal", "jejuPublic", "seogwiGlobal",
-    "seogwiLocal", "seogwiPublic", "tourist", "limousine", "night", "lowbus",
+    "seogwiLocal", "seogwiPublic", "limousine", "night", "lowbus",
     "seogwiCityTour", "jejuCityTour", "village"
 ]
