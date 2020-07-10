@@ -8,5 +8,5 @@ source myvenv/bin/activate
 python3 -m pip install --upgrade pip
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py updatedb --clear-history
+python manage.py updatedb --clear-synonyms --clear-db --noinput
 ```
