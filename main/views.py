@@ -15,7 +15,7 @@ class RouteViewSet(viewsets.ModelViewSet):
         if route_type is not None:
             queryset = queryset.filter(route_type=route_type)
         if route_number is not None:
-            queryset = queryset.filter(route_number=route_number)
+            queryset = queryset.filter(route_number__icontains=route_number)
         queryset = queryset.order_by('route_number')
         return queryset
 
@@ -28,7 +28,7 @@ class StationViewSet(viewsets.ModelViewSet):
         queryset = Station.objects.all()
         station_name = self.request.query_params.get('station_name', None)
         if station_name is not None:
-            queryset = queryset.filter(station_name=station_name)
+            queryset = queryset.filter(station_name__icontains=station_name)
         queryset = queryset.order_by('station_name')
         return queryset
 
