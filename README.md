@@ -1,3 +1,5 @@
+![JejuBus Logo](./img/jejubus.png)
+
 # jejubus-api
 🚍 제주 버스 시간표 비공식 REST API
 
